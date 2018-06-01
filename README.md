@@ -14,4 +14,4 @@ Dependecies:
 numpy
 opencv
 
-![Results](github.com/llmpass/image_interpolation/exp.png)
+![Results](https://github.com/llmpass/image_interpolation/blob/master/exp.PNG)
