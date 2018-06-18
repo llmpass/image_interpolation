@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from math import log
 
 def Key(x, a=-0.5):
   ax = abs(x)
@@ -70,7 +71,7 @@ def interpolate_1d(input_array, factor=2, interpolate_function=Key):
   for i in range(n_inter):
     # find the floating point position in the original array
     loc = i * 1.0 / factor
-    output_array[i] = interpolate_at(loc, input_array, interpolate_function=Key)
+    output_array[i] = interpolate_at(loc, input_array, interpolate_function)
   return output_array
 
 
@@ -93,29 +94,85 @@ def interpolate_w(input_array, factor=2, interpolate_function=Key):
 
 
 def interpolate_2d(input_array, factor=2, interpolate_function=Key):
+  return interpolate_2d(input_array, factor, factor, interpolate_function)
+
+
+def interpolate_2d(input_array, factor_h=2, factor_w=2, interpolate_function=Key):
   h, w = input_array.shape
-  h_inter = int(h * factor)
-  w_inter = int(w * factor)
-  h_interpolat = interpolate_h(input_array, factor, interpolate_function)
-  output_array = interpolate_w(h_interpolat, factor, interpolate_function)
+  h_inter = int(h * factor_h)
+  w_inter = int(w * factor_w)
+  h_interpolat = interpolate_h(input_array, factor_h, interpolate_function)
+  output_array = interpolate_w(h_interpolat, factor_w, interpolate_function)
   return output_array
 
 
 def interpolate_color_img(input_img, factor=2, interpolate_function=Key):
+  return interpolate_color_img(input_img, factor, factor, interpolate_function)
+
+
+def interpolate_color_img(input_img, factor_h=2, factor_w=2, interpolate_function=Key):
   h, w, c = input_img.shape
-  h_inter = int(h * factor)
-  w_inter = int(w * factor)
+  h_inter = int(h * factor_h)
+  w_inter = int(w * factor_w)
   output_img = np.zeros((h_inter, w_inter, 3))
   # interpolate per channel (r, g, b)
   for ic in range(c):
     input_img_ch = input_img[:,:,ic]
-    output_img[:,:,ic] = interpolate_2d(input_img_ch, factor, interpolate_function)
+    output_img[:,:,ic] = interpolate_2d(input_img_ch, factor_h, factor_w, interpolate_function)
   return np.asarray(output_img, dtype=np.uint8)
+
+
+def psnr(img, estimated_img):
+  h, w, c = img.shape
+  he, we, ce = estimated_img.shape
+  assert h==he and w==we and c==ce
+  mse = 0
+  for i1 in range(h):
+    for i2 in range(w):
+      for ic in range(c):
+        channel_diff = float(img[i1, i2, ic]) - float(estimated_img[i1, i2, ic])
+        mse += channel_diff * channel_diff
+  
+  mse /= h * w
+  psnr = 10 * log(255 * 255 / mse, 10)
+  return psnr
+
+
+def down_sample(input_img, factor=2):
+  h, w, c  = input_img.shape
+  h2, w2 = int(h / factor), int(w / factor)
+  output_img = np.zeros((h2, w2, c), dtype=np.uint8)
+  for i1 in range(h2):
+    j = int(i1 * factor)
+    for i2 in range(w2):
+      i = int(i2 * factor)
+      output_img[i1, i2, :] = input_img[j, i, :]
+  return output_img
+
+
+def psnr_test(input_img, factor=1.5):
+  small_img = down_sample(input_img, factor)
+  actual_factor_h = input_img.shape[0] * 1.0 / small_img.shape[0]
+  actual_factor_w = input_img.shape[1] * 1.0 / small_img.shape[1]
+  estimated_img = interpolate_color_img(small_img, actual_factor_h, actual_factor_w, interpolate_function=Key)
+  print('psnr_Key =', psnr(input_img, estimated_img))
+  estimated_img = interpolate_color_img(small_img, actual_factor_h, actual_factor_w, interpolate_function=oMom)
+  print('psnr_oMom =', psnr(input_img, estimated_img))
+  estimated_img = interpolate_color_img(small_img, actual_factor_h, actual_factor_w, interpolate_function=osc)
+  print('psnr_osc =', psnr(input_img, estimated_img))
+  estimated_img = interpolate_color_img(small_img, actual_factor_h, actual_factor_w, interpolate_function=blending_Key_oMom)
+  print('psnr_blending_Key_oMom =', psnr(input_img, estimated_img))
+  estimated_img = interpolate_color_img(small_img, actual_factor_h, actual_factor_w, interpolate_function=blending_Key_osc)
+  print('psnr_blending_Key_osc =', psnr(input_img, estimated_img))
 
 
 def main():
   input_img_file = './sample_images/grief-and-loss-cat.jpg'
   input_img = cv2.imread(input_img_file)
+
+  factor = 1.5
+  psnr_test(input_img, factor)
+
   output_oMom = interpolate_color_img(input_img, 1.5, interpolate_function=oMom)
   output_Key = interpolate_color_img(input_img, 1.5, interpolate_function=Key)
   output_osc = interpolate_color_img(input_img, 1.5, interpolate_function=osc)
@@ -126,7 +183,8 @@ def main():
   cv2.imshow('osc 1.5x', output_osc) 
   cv2.imshow('Key_blend_osc 1.5x', output_blending) 
   cv2.waitKey(0)
-  
+  # interpolate_at(1.5, [1, 1, 1, 1, 1], interpolate_function=oMom)
+
 
 if __name__ == "__main__":
     main()
